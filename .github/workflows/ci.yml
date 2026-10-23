@@ -1,0 +1,39 @@
+name: ci
+
+# Fast checks with no Azure access: Bicep compiles and lints, the image builds.
+# This is the job to mark as required in the org ruleset.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  bicep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and lint Bicep
+        env:
+          # bicepparam files read these; any value compiles.
+          APP_NAME: ci-check
+          PLATFORM_RG: rg-ci
+          CAE_NAME: cae-ci
+          ACR_LOGIN_SERVER: ci.azurecr.io
+          IDENTITY_RG: rg-ci-identities
+        run: |
+          az bicep install
+          az bicep lint --file infra/main.bicep
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+          for p in infra/*.bicepparam; do az bicep build-params --file "$p" --stdout > /dev/null; done
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build app/
+      # TODO: the app's own tests go here.

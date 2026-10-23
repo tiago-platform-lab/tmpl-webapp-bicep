@@ -1,0 +1,4 @@
+# The vending workflow grants the owning team access; replace this with that
+# team when the repo is vended.
+* @tiago-platform-lab/TODO-app-team
+/infra/ @tiago-platform-lab/TODO-app-team @tiago-platform-lab/platform-team

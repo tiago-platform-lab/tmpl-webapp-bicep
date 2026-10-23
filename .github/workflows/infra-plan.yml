@@ -1,0 +1,68 @@
+name: infra-plan
+
+# what-if against dev and prod on every pull request that touches infra/.
+# Runs as the plan identity of each environment: read-only, trusts pull_request
+# only, so a pull request can preview but never change anything.
+
+on:
+  pull_request:
+    paths: ['infra/**', '.github/workflows/infra-plan.yml']
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  what-if:
+    # Only in vended repos (see deploy.yml), not in the template itself.
+    if: vars.APP_NAME != ''
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: dev
+            client-id: ${{ vars.PLAN_CLIENT_ID_DEV }}
+            rg: ${{ vars.RG_DEV }}
+            platform-rg: ${{ vars.PLATFORM_RG_DEV }}
+            cae: ${{ vars.CAE_NAME_DEV }}
+          - env: prod
+            client-id: ${{ vars.PLAN_CLIENT_ID_PROD }}
+            rg: ${{ vars.RG_PROD }}
+            platform-rg: ${{ vars.PLATFORM_RG_PROD }}
+            cae: ${{ vars.CAE_NAME_PROD }}
+    env:
+      APP_NAME: ${{ vars.APP_NAME }}
+      PLATFORM_RG: ${{ matrix.platform-rg }}
+      CAE_NAME: ${{ matrix.cae }}
+      ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+      IDENTITY_RG: ${{ vars.IDENTITY_RG }}
+      TAG_DEPT: ${{ vars.TAG_DEPT }}
+      TAG_OWNER: ${{ vars.TAG_OWNER }}
+      TAG_COST_CENTRE: ${{ vars.TAG_COST_CENTRE }}
+    steps:
+      # A project vended with "dev only" has no plan identity for prod.
+      - name: Skip if not vended
+        if: matrix.client-id == ''
+        run: echo "No ${{ matrix.env }} environment for this project; skipping."
+      - uses: actions/checkout@v4
+        if: matrix.client-id != ''
+      - uses: azure/login@v2
+        if: matrix.client-id != ''
+        with:
+          client-id: ${{ matrix.client-id }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: what-if (${{ matrix.env }})
+        if: matrix.client-id != ''
+        run: |
+          # Preview against the image that is live, so the diff shows infra
+          # changes only, not a tag change.
+          live=$(az containerapp show -n "ca-${APP_NAME}-${{ matrix.env }}" -g "${{ matrix.rg }}" \
+                   --query "properties.template.containers[0].image" -o tsv 2>/dev/null || true)
+          export IMAGE_TAG="${live##*:}"
+          export IMAGE_TAG="${IMAGE_TAG:-latest}"
+          az deployment group what-if \
+            --resource-group "${{ matrix.rg }}" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.${{ matrix.env }}.bicepparam
