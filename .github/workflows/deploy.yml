@@ -47,8 +47,8 @@ jobs:
       PLATFORM_RG: ${{ vars.PLATFORM_RG }}
       CAE_NAME: ${{ vars.CAE_NAME }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: azure/login@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -81,8 +81,8 @@ jobs:
       PLATFORM_RG: ${{ vars.PLATFORM_RG }}
       CAE_NAME: ${{ vars.CAE_NAME }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: azure/login@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}

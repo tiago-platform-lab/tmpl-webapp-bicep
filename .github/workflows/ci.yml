@@ -15,7 +15,7 @@ jobs:
   bicep:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build and lint Bicep
         env:
           # bicepparam files read these; any value compiles.
@@ -33,7 +33,7 @@ jobs:
   image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build the image
         run: docker build app/
       # TODO: the app's own tests go here.

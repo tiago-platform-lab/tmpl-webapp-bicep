@@ -1,0 +1,55 @@
+# tmpl-webapp-bicep
+
+Template for a team app on Azure Container Apps. A vended repo deploys as-is: the
+placeholder in `app/` reaches dev on the first push to `main`. In this template
+repo itself the deploy and what-if workflows are skipped (no `APP_NAME`).
+
+## What `infra/main.bicep` creates
+
+Inside `rg-<app>-<env>`:
+
+| Resource | Default | Switch |
+|---|---|---|
+| Container App `ca-<app>-<env>` | on | |
+| Key Vault `kv-<app>-<env>` (RBAC) | on | |
+| Storage account + queue `jobs` (identity only) | off | `enableStorage` |
+| Worker Container App, same image, no ingress | off | `enableWorker` |
+| Postgres Flexible Server, Entra-only | off | `enablePostgres` |
+
+It references, never creates: the department's Container Apps environment and
+registry (platform-shared) and the runtime identity (vending).
+
+The app runs as `id-<app>-<env>-runtime`. It reads secrets from Key Vault and
+storage by identity; there are no passwords in the app or the pipeline. Its roles
+were granted by vending; this repo cannot grant roles. If the app needs another
+one (for example on an AI service), ask for it through its `projects/<app>.yaml`.
+
+## Who owns what
+
+`infra/main.bicep` owns every property of the app: sizing, scale, env vars. The
+only thing passed in at deploy time is the image tag. Do not set those properties
+anywhere else (portal, `az containerapp update`), or the next deploy puts them back.
+
+## Pipelines
+
+| Workflow | When | Runs as |
+|---|---|---|
+| `ci.yml` | every PR and push | no Azure access |
+| `infra-plan.yml` | PRs touching `infra/` | plan identity (What-If Reader) |
+| `deploy.yml` | push to `main` | dev: build the image on the runner, push, deploy; prod: deploy the same tag after approval |
+
+Rollback: run **deploy** by hand with `image-tag` set to an earlier commit SHA.
+
+Actions are pinned by commit SHA; Dependabot keeps them up to date.
+
+## Variables
+
+All set by vending; nothing to edit after the repo is created. `infra/*.bicepparam`
+read them with `readEnvironmentVariable`.
+
+## Make it yours
+
+1. Replace `app/` with the real app (keep port 8080 or change `targetPort`).
+2. Turn on what you need in `infra/main.<env>.bicepparam`.
+3. Add the app's tests to `ci.yml` and its ecosystem to `dependabot.yml`.
+4. Replace the teams in `.github/CODEOWNERS`.

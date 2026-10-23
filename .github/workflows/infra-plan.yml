@@ -45,9 +45,9 @@ jobs:
       - name: Skip if not vended
         if: matrix.client-id == ''
         run: echo "No ${{ matrix.env }} environment for this project; skipping."
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: matrix.client-id != ''
-      - uses: azure/login@v2
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         if: matrix.client-id != ''
         with:
           client-id: ${{ matrix.client-id }}
@@ -62,7 +62,9 @@ jobs:
                    --query "properties.template.containers[0].image" -o tsv 2>/dev/null || true)
           export IMAGE_TAG="${live##*:}"
           export IMAGE_TAG="${IMAGE_TAG:-latest}"
+          # ProviderNoRbac: check read access, not write; the plan identity only reads.
           az deployment group what-if \
+            --validation-level ProviderNoRbac \
             --resource-group "${{ matrix.rg }}" \
             --template-file infra/main.bicep \
             --parameters infra/main.${{ matrix.env }}.bicepparam
