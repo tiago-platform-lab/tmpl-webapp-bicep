@@ -47,7 +47,7 @@ jobs:
         run: echo "No ${{ matrix.env }} environment for this project; skipping."
       - uses: actions/checkout@v4
         if: matrix.client-id != ''
-      - uses: azure/login@v2
+      - uses: azure/login@v3
         if: matrix.client-id != ''
         with:
           client-id: ${{ matrix.client-id }}
