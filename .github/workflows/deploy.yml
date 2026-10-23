@@ -47,7 +47,7 @@ jobs:
       PLATFORM_RG: ${{ vars.PLATFORM_RG }}
       CAE_NAME: ${{ vars.CAE_NAME }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
@@ -81,7 +81,7 @@ jobs:
       PLATFORM_RG: ${{ vars.PLATFORM_RG }}
       CAE_NAME: ${{ vars.CAE_NAME }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}

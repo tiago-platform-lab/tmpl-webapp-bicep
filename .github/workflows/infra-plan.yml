@@ -45,7 +45,7 @@ jobs:
       - name: Skip if not vended
         if: matrix.client-id == ''
         run: echo "No ${{ matrix.env }} environment for this project; skipping."
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: matrix.client-id != ''
       - uses: azure/login@v2
         if: matrix.client-id != ''
