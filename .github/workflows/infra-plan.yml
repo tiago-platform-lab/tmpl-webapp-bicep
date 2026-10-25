@@ -6,7 +6,8 @@ name: infra-plan
 
 on:
   pull_request:
-    paths: ['infra/**', '.github/workflows/infra-plan.yml']
+    # Also when the login action changes: the what-if is the first place it runs.
+    paths: ['infra/**', '.github/workflows/infra-plan.yml', '.github/actions/**']
 
 permissions:
   id-token: write
