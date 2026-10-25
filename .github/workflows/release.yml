@@ -1,0 +1,117 @@
+name: release
+
+# Publishing a release (or pushing a tag) vX.Y.Z promotes to prod the image
+# that dev built and tested for that commit:
+#
+#   tag-image  checks the tag and the commit, then names the existing image
+#              <app>:<commit sha> also <app>:vX.Y.Z in the registry. No rebuild.
+#              A published version never moves: if vX.Y.Z already names a
+#              different image, the release fails.
+#   prod       after approval, deploys <app>:vX.Y.Z, so prod always runs a
+#              versioned image and shows which version it is.
+#
+# tag-image runs as the dev deploy identity, the only one allowed to write to
+# the registry (environment dev accepts main and v* tags). Prod never writes
+# to the registry; environment prod accepts v* tags only.
+#
+# Rollback: run this workflow by hand on an earlier tag
+# (gh workflow run release.yml --ref v1.0.0). The image already carries that
+# version, so it is only redeployed.
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  APP_NAME: ${{ vars.APP_NAME }}
+  ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+  IDENTITY_RG: ${{ vars.IDENTITY_RG }}
+  VERSION: ${{ github.ref_name }}
+  TAG_DEPT: ${{ vars.TAG_DEPT }}
+  TAG_OWNER: ${{ vars.TAG_OWNER }}
+  TAG_COST_CENTRE: ${{ vars.TAG_COST_CENTRE }}
+
+jobs:
+  tag-image:
+    # Not in the template repo itself (no APP_NAME).
+    if: vars.APP_NAME != ''
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Check the tag and its commit
+        id: check
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_TYPE" != "tag" ] || ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Run this on a tag vX.Y.Z (got $GITHUB_REF_TYPE '$VERSION')."; exit 1
+          fi
+          sha=$(git rev-parse "${GITHUB_REF}^{commit}")
+          # Only reviewed code goes to prod: the tagged commit must be on main.
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::$VERSION points to $sha, which is not on main."; exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Name the dev image with the version
+        env:
+          SHA: ${{ steps.check.outputs.sha }}
+        run: |
+          set -euo pipefail
+          az acr login --name "$ACR_LOGIN_SERVER"
+          src="${ACR_LOGIN_SERVER}/${APP_NAME}:${SHA}"
+          dst="${ACR_LOGIN_SERVER}/${APP_NAME}:${VERSION}"
+          digest() { docker buildx imagetools inspect "$1" --format '{{.Manifest.Digest}}'; }
+
+          # Prod only gets images that went through dev.
+          src_digest=$(digest "$src") \
+            || { echo "::error::$src not found: was this commit deployed to dev?"; exit 1; }
+
+          if dst_digest=$(digest "$dst" 2>/dev/null); then
+            [ "$dst_digest" = "$src_digest" ] \
+              || { echo "::error::$VERSION already names another image ($dst_digest)."; exit 1; }
+            echo "$dst already names this image (rollback or re-run)."
+          else
+            # Adds a second tag to the same manifest; no layers are copied.
+            docker buildx imagetools create --tag "$dst" "$src"
+          fi
+          echo "$dst -> $src_digest"
+
+  prod:
+    needs: tag-image
+    runs-on: ubuntu-latest
+    environment: prod # required reviewers; accepts v* tags only
+    env:
+      PLATFORM_RG: ${{ vars.PLATFORM_RG }}
+      CAE_NAME: ${{ vars.CAE_NAME }}
+      IMAGE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy ${{ github.ref_name }}
+        run: |
+          az deployment group create \
+            --name "release-${{ github.run_id }}" \
+            --resource-group "${{ vars.RESOURCE_GROUP }}" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.prod.bicepparam \
+            --query properties.outputs.url.value -o tsv

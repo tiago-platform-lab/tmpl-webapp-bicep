@@ -1,10 +1,11 @@
-name: deploy
+name: deploy-dev
 
-# main -> build the image once -> deploy dev -> (approval) -> deploy prod.
-# The same image tag goes to both environments; prod never rebuilds.
+# Every merge to main: build the image once, as <app>:<commit sha>, and deploy
+# it to dev. Prod is a separate decision: publishing a vX.Y.Z release runs
+# release.yml, which promotes this same image (no rebuild) after approval.
 #
-# Rollback: run this workflow by hand with image-tag set to an earlier commit
-# SHA. The build is skipped and that tag is redeployed.
+# Rollback in dev: run this workflow by hand with image-tag set to an earlier
+# commit SHA. The build is skipped and that tag is redeployed.
 #
 # Infra and image deploy together: the Bicep owns the whole app and the image
 # tag is just one of its parameters, so there is one way to change the app.
@@ -24,7 +25,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy
+  group: deploy-dev
   cancel-in-progress: false
 
 env:
@@ -39,7 +40,7 @@ env:
 jobs:
   dev:
     # APP_NAME is set by the vending workflow; the template repo itself has
-    # none and never deploys. prod is skipped with it, as it needs dev.
+    # none and never deploys.
     if: vars.APP_NAME != ''
     runs-on: ubuntu-latest
     environment: dev
@@ -72,26 +73,3 @@ jobs:
             --parameters infra/main.dev.bicepparam \
             --query properties.outputs.url.value -o tsv
       # TODO: smoke test the returned URL before moving on.
-
-  prod:
-    needs: dev
-    runs-on: ubuntu-latest
-    environment: prod # required reviewers are set on this environment
-    env:
-      PLATFORM_RG: ${{ vars.PLATFORM_RG }}
-      CAE_NAME: ${{ vars.CAE_NAME }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Deploy
-        run: |
-          az deployment group create \
-            --name "app-${{ github.run_id }}" \
-            --resource-group "${{ vars.RESOURCE_GROUP }}" \
-            --template-file infra/main.bicep \
-            --parameters infra/main.prod.bicepparam \
-            --query properties.outputs.url.value -o tsv

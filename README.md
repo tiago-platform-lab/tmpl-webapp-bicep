@@ -36,9 +36,25 @@ anywhere else (portal, `az containerapp update`), or the next deploy puts them b
 |---|---|---|
 | `ci.yml` | every PR and push | no Azure access |
 | `infra-plan.yml` | PRs touching `infra/` | plan identity (What-If Reader) |
-| `deploy.yml` | push to `main` | dev: build the image on the runner, push, deploy; prod: deploy the same tag after approval |
+| `deploy-dev.yml` | push to `main` | dev deploy identity: build `<app>:<sha>` on the runner, push, deploy to dev |
+| `release.yml` | tag `vX.Y.Z` (a published release) | dev identity names the tested image `<app>:vX.Y.Z`; prod identity deploys it after approval |
 
-Rollback: run **deploy** by hand with `image-tag` set to an earlier commit SHA.
+### Releasing to prod
+
+Every merge reaches dev. Prod only gets versions:
+
+1. **Releases** → **Draft a new release** → tag `v1.2.3` on `main` → **Publish release**
+   (or `git tag v1.2.3 && git push origin v1.2.3`).
+2. `release.yml` checks the tag is `vX.Y.Z` on a commit of `main` that was deployed
+   to dev, and adds the version to that same image in the registry (no rebuild).
+   A version never moves: reusing a tag for another image fails.
+3. Approve the `prod` deployment. Prod runs `<registry>/<app>:v1.2.3`.
+
+Release tags are protected: only the owning team can create them, and nobody can
+move or delete them.
+
+Rollback: dev, run **deploy-dev** by hand with `image-tag` set to an earlier commit
+SHA; prod, run **release** on an earlier tag (`gh workflow run release.yml --ref v1.2.2`).
 
 Actions are pinned by commit SHA; Dependabot keeps them up to date.
 
