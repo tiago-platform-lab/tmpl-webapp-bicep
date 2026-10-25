@@ -63,7 +63,7 @@ jobs:
             echo "::error::$VERSION points to $sha, which is not on main."; exit 1
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+      - uses: ./.github/actions/azure-login # OIDC login + wait for RBAC propagation
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -102,7 +102,7 @@ jobs:
       IMAGE_TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+      - uses: ./.github/actions/azure-login # OIDC login + wait for RBAC propagation
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
