@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    # Workflows and the local composite actions (azure-login pins azure/login).
+    # Workflows and the local composite actions under .github/actions.
     directories: ["/", "/.github/actions/*"]
     schedule:
       interval: weekly
