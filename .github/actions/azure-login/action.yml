@@ -1,0 +1,51 @@
+name: Azure login
+description: >
+  OIDC login to Azure, then wait until the identity can see the subscription.
+  Azure RBAC is eventually consistent: a role assignment made minutes ago (for
+  example by vending, right before the first deploy) can take up to about ten
+  minutes to take effect. The login itself works at once; access may not, so
+  this retries with a growing delay instead of failing on the first attempt.
+
+inputs:
+  client-id:
+    description: Client ID of the managed identity to log in as.
+    required: true
+  tenant-id:
+    required: true
+  subscription-id:
+    required: true
+  timeout-seconds:
+    description: How long to wait for access before failing.
+    default: '600'
+
+runs:
+  using: composite
+  steps:
+    - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        # Do not fail when no subscription is visible yet; the next step waits.
+        allow-no-subscriptions: true
+
+    - name: Wait for access to the subscription
+      shell: bash
+      env:
+        SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+        TIMEOUT: ${{ inputs.timeout-seconds }}
+      run: |
+        set -euo pipefail
+        start=$SECONDS
+        delay=10
+        until az account list --refresh --query "[?id=='$SUBSCRIPTION_ID'].id" -o tsv 2>/dev/null | grep -q .; do
+          waited=$((SECONDS - start))
+          if [ "$waited" -ge "$TIMEOUT" ]; then
+            echo "::error::No access to subscription $SUBSCRIPTION_ID after ${waited}s. Check the identity's role assignments."
+            exit 1
+          fi
+          echo "Subscription not visible yet after ${waited}s (role assignments still propagating); retrying in ${delay}s."
+          sleep "$delay"
+          delay=$((delay < 60 ? delay * 2 : 60))
+        done
+        az account set --subscription "$SUBSCRIPTION_ID"
+        echo "Access to the subscription after $((SECONDS - start))s."

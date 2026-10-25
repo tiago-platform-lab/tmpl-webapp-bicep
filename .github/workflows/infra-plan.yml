@@ -47,7 +47,7 @@ jobs:
         run: echo "No ${{ matrix.env }} environment for this project; skipping."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: matrix.client-id != ''
-      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+      - uses: ./.github/actions/azure-login # OIDC login + wait for RBAC propagation
         if: matrix.client-id != ''
         with:
           client-id: ${{ matrix.client-id }}
