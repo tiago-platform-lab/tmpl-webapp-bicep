@@ -1,8 +1,11 @@
 # tmpl-webapp-bicep
 
-Template for a team app on Azure Container Apps. A vended repo deploys as-is: the
-placeholder in `app/` reaches dev on the first push to `main`. In this template
-repo itself the deploy and what-if workflows are skipped (no `APP_NAME`).
+Template for a team app on Azure Container Apps. Vending creates each app repo from
+it and starts the first deploy, so a new repo runs the placeholder in `app/` in dev
+right away. In this template repo itself the deploy and what-if workflows are
+skipped (no `APP_NAME`).
+
+How the whole platform works: [platform overview](https://github.com/tiago-platform-lab/platform-vending/blob/main/docs/README.md).
 
 ## What `infra/main.bicep` creates
 
@@ -35,7 +38,7 @@ anywhere else (portal, `az containerapp update`), or the next deploy puts them b
 | Workflow | When | Runs as |
 |---|---|---|
 | `ci.yml` | every PR and push | no Azure access |
-| `infra-plan.yml` | PRs touching `infra/` | plan identity (What-If Reader) |
+| `infra-plan.yml` | PRs touching `infra/`, the workflow or `.github/actions/` | plan identity (What-If Reader) |
 | `deploy-dev.yml` | push to `main` | dev deploy identity: build `<app>:<sha>` on the runner, push, deploy to dev |
 | `release.yml` | tag `vX.Y.Z` (a published release) | dev identity names the tested image `<app>:vX.Y.Z`; prod identity deploys it after approval |
 
