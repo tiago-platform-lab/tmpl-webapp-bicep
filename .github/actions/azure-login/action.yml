@@ -37,23 +37,21 @@ runs:
           exit 1
         fi
 
-        # A fresh token for every attempt: GitHub OIDC tokens are short-lived.
-        oidc_token() {
-          local t
-          t=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-                "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange" | jq -r .value)
-          echo "::add-mask::$t"
-          echo "$t"
-        }
-
         start=$SECONDS
         delay=10
         attempt=1
         while :; do
           reason=""
+          # A fresh token for every attempt: GitHub OIDC tokens are short-lived.
+          # Kept in a variable (not $(function)) so nothing else, such as the
+          # add-mask command, ends up in the token.
+          token=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                    "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange" | jq -r .value)
+          echo "::add-mask::$token"
           if ! out=$(az login --service-principal --username "$CLIENT_ID" --tenant "$TENANT_ID" \
-                       --federated-token "$(oidc_token)" --allow-no-subscriptions --output none 2>&1); then
-            reason="login failed: $(tail -n 1 <<< "$out")"
+                       --federated-token "$token" --allow-no-subscriptions --output none 2>&1); then
+            # The useful line is the ERROR one; az ends with a generic "az login" hint.
+            reason="login failed: $(grep -m 1 'ERROR' <<< "$out" || head -n 1 <<< "$out")"
           elif ! out=$(az account set --subscription "$SUBSCRIPTION_ID" 2>&1); then
             reason="subscription not visible yet (role assignments may still be propagating)"
           else
