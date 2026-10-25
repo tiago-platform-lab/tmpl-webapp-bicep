@@ -58,8 +58,9 @@ SHA; prod, run **release** on an earlier tag (`gh workflow run release.yml --ref
 
 Actions are pinned by commit SHA; Dependabot keeps them up to date.
 
-Every Azure login goes through `.github/actions/azure-login`: OIDC login, then
-wait (up to 10 minutes, growing delay) until the identity sees the subscription.
+Every Azure login goes through `.github/actions/azure-login`: a full OIDC login,
+repeated with a fresh token and a growing delay (up to 10 minutes) until the
+identity can use the subscription.
 New role assignments take minutes to take effect, e.g. on the first deploy right
 after vending; without the wait that deploy would fail with "No subscriptions found".
 

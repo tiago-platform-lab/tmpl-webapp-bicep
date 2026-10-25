@@ -1,10 +1,12 @@
 name: Azure login
 description: >
-  OIDC login to Azure, then wait until the identity can see the subscription.
-  Azure RBAC is eventually consistent: a role assignment made minutes ago (for
-  example by vending, right before the first deploy) can take up to about ten
-  minutes to take effect. The login itself works at once; access may not, so
-  this retries with a growing delay instead of failing on the first attempt.
+  OIDC login to Azure that waits until the identity can use the subscription.
+  Azure RBAC is eventually consistent: a role assignment made seconds ago (for
+  example by vending, right before the first deploy) can take minutes to take
+  effect. Each attempt is a complete new login with a fresh GitHub OIDC token,
+  because an existing az session does not pick up access granted after it
+  started (refreshing it was tried and never saw the new role). Retries with a
+  growing delay and prints why each attempt failed.
 
 inputs:
   client-id:
@@ -15,37 +17,57 @@ inputs:
   subscription-id:
     required: true
   timeout-seconds:
-    description: How long to wait for access before failing.
+    description: How long to keep trying before failing.
     default: '600'
 
 runs:
   using: composite
   steps:
-    - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
-      with:
-        client-id: ${{ inputs.client-id }}
-        tenant-id: ${{ inputs.tenant-id }}
-        # Do not fail when no subscription is visible yet; the next step waits.
-        allow-no-subscriptions: true
-
-    - name: Wait for access to the subscription
+    - name: Log in to Azure (OIDC), waiting for access
       shell: bash
       env:
+        CLIENT_ID: ${{ inputs.client-id }}
+        TENANT_ID: ${{ inputs.tenant-id }}
         SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
         TIMEOUT: ${{ inputs.timeout-seconds }}
       run: |
         set -euo pipefail
+        if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+          echo "::error::No GitHub OIDC token available: the workflow needs 'permissions: id-token: write'."
+          exit 1
+        fi
+
+        # A fresh token for every attempt: GitHub OIDC tokens are short-lived.
+        oidc_token() {
+          local t
+          t=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange" | jq -r .value)
+          echo "::add-mask::$t"
+          echo "$t"
+        }
+
         start=$SECONDS
         delay=10
-        until az account list --refresh --query "[?id=='$SUBSCRIPTION_ID'].id" -o tsv 2>/dev/null | grep -q .; do
+        attempt=1
+        while :; do
+          reason=""
+          if ! out=$(az login --service-principal --username "$CLIENT_ID" --tenant "$TENANT_ID" \
+                       --federated-token "$(oidc_token)" --allow-no-subscriptions --output none 2>&1); then
+            reason="login failed: $(tail -n 1 <<< "$out")"
+          elif ! out=$(az account set --subscription "$SUBSCRIPTION_ID" 2>&1); then
+            reason="subscription not visible yet (role assignments may still be propagating)"
+          else
+            echo "Logged in with access to the subscription (attempt $attempt, $((SECONDS - start))s)."
+            break
+          fi
+
           waited=$((SECONDS - start))
           if [ "$waited" -ge "$TIMEOUT" ]; then
-            echo "::error::No access to subscription $SUBSCRIPTION_ID after ${waited}s. Check the identity's role assignments."
+            echo "::error::No access to subscription $SUBSCRIPTION_ID after ${waited}s ($attempt attempts). Last: $reason. Check the identity's role assignments and federated credential."
             exit 1
           fi
-          echo "Subscription not visible yet after ${waited}s (role assignments still propagating); retrying in ${delay}s."
+          echo "Attempt $attempt after ${waited}s: $reason. Retrying in ${delay}s."
           sleep "$delay"
           delay=$((delay < 60 ? delay * 2 : 60))
+          attempt=$((attempt + 1))
         done
-        az account set --subscription "$SUBSCRIPTION_ID"
-        echo "Access to the subscription after $((SECONDS - start))s."
