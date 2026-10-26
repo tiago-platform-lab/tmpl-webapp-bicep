@@ -91,6 +91,7 @@ const SERVER_FILLED = new Set([
   'properties.configuration.ingress.fqdn',
   'properties.configuration.ingress.exposedPort',
   'properties.configuration.ingress.traffic',
+  'properties.configuration.maxInactiveRevisions',
 ]);
 const isNoise = (leaf) =>
   (leaf.change === 'Delete' && SERVER_FILLED.has(leaf.path)) ||
