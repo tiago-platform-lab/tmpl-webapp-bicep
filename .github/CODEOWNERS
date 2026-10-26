@@ -1,4 +1,4 @@
-# The vending workflow grants the owning team access; replace this with that
-# team when the repo is vended.
+# Placeholder: vending overwrites this file with the owning team from
+# projects/<app>.yaml (and the platform team on infra/) when the repo is created.
 * @tiago-platform-lab/TODO-app-team
 /infra/ @tiago-platform-lab/TODO-app-team @tiago-platform-lab/platform-team
