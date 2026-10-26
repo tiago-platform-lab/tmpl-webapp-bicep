@@ -16,10 +16,11 @@ param tags = {
   'cost-centre': readEnvironmentVariable('TAG_COST_CENTRE', 'TODO')
 }
 
-// Prod: one warm replica, no cold start for the first user.
+// Prod: scales to zero when idle (no fixed cost); the first request after a
+// quiet period waits a few seconds. Set minReplicas = 1 to keep one warm replica.
 param cpu = '1.0'
 param memory = '2Gi'
-param minReplicas = 1
+param minReplicas = 0
 param maxReplicas = 3
 
 param enableStorage = false
