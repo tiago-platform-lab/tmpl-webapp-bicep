@@ -1,0 +1,149 @@
+name: blast-radius
+
+# Every pull request: what could this change break, and how badly?
+#
+#   whatif   what-if for dev and prod as JSON, as the plan identity (read-only)
+#   analyze  1. rules (deterministic): what-if changes and sensitive files set a
+#               minimum risk, e.g. deleting a Key Vault or a database is critical
+#            2. an LLM (OpenAI) reads the diff and the rule findings: removed or
+#               changed endpoints, data, security, config, plain code review
+#            The LLM can raise the risk, never lower it below the rules: the PR
+#            itself could try to talk it down. The analysis scripts are taken from
+#            the target branch, so a PR cannot change the rules that judge it.
+#            Result: one PR comment, updated on every push.
+#
+# Without OPENAI_API_KEY (secret) and OPENAI_MODEL (variable) only the rules run.
+# OPENAI_REASONING_EFFORT (variable, optional): low, medium or high.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blast-radius-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  whatif:
+    # Only in vended repos (see deploy-dev.yml), not in the template itself.
+    if: vars.APP_NAME != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: dev
+            client-id: ${{ vars.PLAN_CLIENT_ID_DEV }}
+            rg: ${{ vars.RG_DEV }}
+            platform-rg: ${{ vars.PLATFORM_RG_DEV }}
+            cae: ${{ vars.CAE_NAME_DEV }}
+          - env: prod
+            client-id: ${{ vars.PLAN_CLIENT_ID_PROD }}
+            rg: ${{ vars.RG_PROD }}
+            platform-rg: ${{ vars.PLATFORM_RG_PROD }}
+            cae: ${{ vars.CAE_NAME_PROD }}
+    env:
+      APP_NAME: ${{ vars.APP_NAME }}
+      PLATFORM_RG: ${{ matrix.platform-rg }}
+      CAE_NAME: ${{ matrix.cae }}
+      ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+      IDENTITY_RG: ${{ vars.IDENTITY_RG }}
+      TAG_DEPT: ${{ vars.TAG_DEPT }}
+      TAG_OWNER: ${{ vars.TAG_OWNER }}
+      TAG_COST_CENTRE: ${{ vars.TAG_COST_CENTRE }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: matrix.client-id != ''
+      - uses: ./.github/actions/azure-login # OIDC login + wait for RBAC propagation
+        if: matrix.client-id != ''
+        with:
+          client-id: ${{ matrix.client-id }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: what-if (${{ matrix.env }}) as JSON
+        if: matrix.client-id != ''
+        env:
+          ENV_NAME: ${{ matrix.env }}
+          RG: ${{ matrix.rg }}
+        run: |
+          set -euo pipefail
+          # Against the image that is live, so the result shows infra changes only.
+          live=$(az containerapp show -n "ca-${APP_NAME}-${ENV_NAME}" -g "$RG" \
+                   --query "properties.template.containers[0].image" -o tsv 2>/dev/null || true)
+          export IMAGE_TAG="${live##*:}"
+          export IMAGE_TAG="${IMAGE_TAG:-latest}"
+          mkdir -p whatif
+          az deployment group what-if \
+            --validation-level ProviderNoRbac \
+            --resource-group "$RG" \
+            --template-file infra/main.bicep \
+            --parameters "infra/main.${ENV_NAME}.bicepparam" \
+            --no-pretty-print --output json > "whatif/${ENV_NAME}.json"
+          echo "what-if ${ENV_NAME}: $(jq '[.changes[] | select(.changeType != "NoChange" and .changeType != "Ignore")] | length' "whatif/${ENV_NAME}.json") change(s)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: matrix.client-id != ''
+        with:
+          name: whatif-${{ matrix.env }}
+          path: whatif/${{ matrix.env }}.json
+          retention-days: 7
+
+  analyze:
+    needs: whatif
+    # Also when what-if was skipped (template repo) or failed: the rules then say so.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # the comment
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          pattern: whatif-*
+          merge-multiple: true
+          path: whatif
+      - name: Take the analysis scripts from the target branch
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/blast-radius"
+          for f in analyze.mjs publish.sh; do
+            if git show "$BASE_REF:.github/scripts/blast-radius/$f" > "$RUNNER_TEMP/blast-radius/$f" 2>/dev/null; then
+              echo "$f from the target branch"
+            else
+              # First time: the target branch has no analyzer yet.
+              cp ".github/scripts/blast-radius/$f" "$RUNNER_TEMP/blast-radius/$f"
+              echo "::warning::$f is not on the target branch yet; using the pull request's copy."
+            fi
+          done
+          chmod +x "$RUNNER_TEMP/blast-radius/publish.sh"
+      - name: Analyze
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          WHATIF_RESULT: ${{ needs.whatif.result }}
+          APP_NAME: ${{ vars.APP_NAME }}
+          OUT_DIR: ${{ runner.temp }}/blast-radius/out
+        run: node "$RUNNER_TEMP/blast-radius/analyze.mjs"
+      - name: Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          OUT_DIR: ${{ runner.temp }}/blast-radius/out
+        run: |
+          "$RUNNER_TEMP/blast-radius/publish.sh"
+          cat "$OUT_DIR/comment.md" >> "$GITHUB_STEP_SUMMARY"

@@ -40,6 +40,7 @@ anywhere else (portal, `az containerapp update`), or the next deploy puts them b
 | `ci.yml` | every PR and push | no Azure access |
 | `infra-plan.yml` | PRs touching `infra/`, the workflow or `.github/actions/` | plan identity (What-If Reader) |
 | `deploy-dev.yml` | push to `main` | dev deploy identity: build `<app>:<sha>` on the runner, push, deploy to dev |
+| `blast-radius.yml` | every PR | plan identity (what-if JSON), then no Azure access: rules + LLM, one PR comment |
 | `release.yml` | tag `vX.Y.Z` (a published release) | dev identity names the tested image `<app>:vX.Y.Z`; prod identity deploys it after approval |
 
 ### Releasing to prod
@@ -78,3 +79,23 @@ read them with `readEnvironmentVariable`.
 2. Turn on what you need in `infra/main.<env>.bicepparam`.
 3. Add the app's tests to `ci.yml` and its ecosystem to `dependabot.yml`.
 4. Replace the teams in `.github/CODEOWNERS`.
+
+## Blast radius bot
+
+Every pull request gets one comment, updated on each push, with its risk level
+(low, medium, high, critical), from `.github/workflows/blast-radius.yml`:
+
+1. **Rules (deterministic)** on the what-if of dev and prod and on the changed files: a Key Vault,
+   storage account, database or Log Analytics deleted or modified, identities or roles touched,
+   ingress/scale/identity of the Container App changed, a stateful resource removed from the Bicep
+   (incremental deployments leave it in Azure, unmanaged), pipeline or CODEOWNERS changes.
+   Known what-if noise (properties Azure fills in, values from `reference()`) is ignored.
+2. **LLM (OpenAI)** reads the diff and the rule findings: removed or changed endpoints, data,
+   security, config, and real code problems; writes the summary, rollback and reviewer checklist.
+
+The final level is the higher of the two: the LLM can raise it, never lower it below the rules,
+because the PR itself could try to talk it down. The analysis scripts are taken from the target
+branch, so a PR cannot change the rules that judge it. Needs the org secret `OPENAI_API_KEY` and
+the variable `OPENAI_MODEL` (optional: `OPENAI_REASONING_EFFORT`, e.g. `medium`); without them only
+the rules run. Code is sent to OpenAI: check this
+is allowed for the repo (Azure OpenAI with the app's identity is the alternative).
