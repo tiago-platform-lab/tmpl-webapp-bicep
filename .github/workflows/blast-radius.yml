@@ -13,6 +13,7 @@ name: blast-radius
 #            Result: one PR comment, updated on every push, and a risk:* label.
 #
 # Without OPENAI_API_KEY (secret) and OPENAI_MODEL (variable) only the rules run.
+# OPENAI_REASONING_EFFORT (variable, optional): low, medium or high.
 
 on:
   pull_request:
@@ -130,6 +131,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_TITLE: ${{ github.event.pull_request.title }}

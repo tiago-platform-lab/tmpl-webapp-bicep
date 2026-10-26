@@ -11,7 +11,8 @@
 // error: the rules alone still produce a comment.
 //
 // Env: BASE_SHA, HEAD_SHA, PR_TITLE, PR_BODY, WHATIF_RESULT, APP_NAME, OUT_DIR,
-//      OPENAI_API_KEY and OPENAI_MODEL (both optional).
+//      OPENAI_API_KEY and OPENAI_MODEL (both optional), OPENAI_REASONING_EFFORT
+//      (optional: low, medium, high; only for reasoning models).
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -244,6 +245,8 @@ async function askLlm() {
       headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: env.OPENAI_MODEL,
+        // Sent only when set: models without reasoning reject the parameter.
+        ...(env.OPENAI_REASONING_EFFORT ? { reasoning_effort: env.OPENAI_REASONING_EFFORT } : {}),
         messages: [
           { role: 'system', content: SYSTEM },
           { role: 'user', content: JSON.stringify(input) },
@@ -318,7 +321,8 @@ if (llm.result?.checklist?.length) {
   lines.push('');
 }
 
-const note = (llm.skipped || llm.error || `LLM: ${llm.model}`).replace(/\.$/, '');
+const effort = env.OPENAI_REASONING_EFFORT ? `, ${env.OPENAI_REASONING_EFFORT} effort` : "";
+const note = (llm.skipped || llm.error || `LLM: ${llm.model}${effort}`).replace(/\.$/, '');
 const noise = noiseCount ? `. ${noiseCount} what-if noise entr${noiseCount === 1 ? 'y' : 'ies'} ignored` : '';
 lines.push(`<sub>Rules are deterministic; the LLM explains and can only raise the level. ${esc(note)}${noise}. Commit ${String(env.HEAD_SHA).slice(0, 7)}${diffTruncated ? '. Diff truncated for the LLM' : ''}.</sub>`);
 

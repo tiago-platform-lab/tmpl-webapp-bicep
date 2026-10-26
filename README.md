@@ -96,5 +96,6 @@ label, from `.github/workflows/blast-radius.yml`:
 The final level is the higher of the two: the LLM can raise it, never lower it below the rules,
 because the PR itself could try to talk it down. The analysis scripts are taken from the target
 branch, so a PR cannot change the rules that judge it. Needs the org secret `OPENAI_API_KEY` and
-the variable `OPENAI_MODEL`; without them only the rules run. Code is sent to OpenAI: check this
+the variable `OPENAI_MODEL` (optional: `OPENAI_REASONING_EFFORT`, e.g. `medium`); without them only
+the rules run. Code is sent to OpenAI: check this
 is allowed for the repo (Azure OpenAI with the app's identity is the alternative).
