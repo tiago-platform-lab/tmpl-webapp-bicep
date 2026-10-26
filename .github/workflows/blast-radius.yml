@@ -10,7 +10,7 @@ name: blast-radius
 #            The LLM can raise the risk, never lower it below the rules: the PR
 #            itself could try to talk it down. The analysis scripts are taken from
 #            the target branch, so a PR cannot change the rules that judge it.
-#            Result: one PR comment, updated on every push, and a risk:* label.
+#            Result: one PR comment, updated on every push.
 #
 # Without OPENAI_API_KEY (secret) and OPENAI_MODEL (variable) only the rules run.
 # OPENAI_REASONING_EFFORT (variable, optional): low, medium or high.
@@ -99,8 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
-      issues: write # labels
+      pull-requests: write # the comment
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -140,7 +139,7 @@ jobs:
           APP_NAME: ${{ vars.APP_NAME }}
           OUT_DIR: ${{ runner.temp }}/blast-radius/out
         run: node "$RUNNER_TEMP/blast-radius/analyze.mjs"
-      - name: Comment and label
+      - name: Comment
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

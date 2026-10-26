@@ -7,7 +7,7 @@
 //      the blast radius: removed or changed endpoints, data, security, config,
 //      code issues. It may raise the risk, never lower it below the rules.
 //
-// Writes $OUT_DIR/comment.md and $OUT_DIR/risk. Never fails the job on an LLM
+// Writes $OUT_DIR/comment.md (and $OUT_DIR/risk, the final level). Never fails the job on an LLM
 // error: the rules alone still produce a comment.
 //
 // Env: BASE_SHA, HEAD_SHA, PR_TITLE, PR_BODY, WHATIF_RESULT, APP_NAME, OUT_DIR,
@@ -78,7 +78,7 @@ function parseId(id) {
 // - properties Azure fills in itself (the Bicep never sets them) show as "Delete";
 // - values that come from reference() cannot be computed before the deployment
 //   and show as a change to the unresolved "[reference(...)]" expression.
-// Left in, every pull request would be "high" and the label would mean nothing.
+// Left in, every pull request would be "high" and the level would mean nothing.
 const SERVER_FILLED = new Set([
   'properties.runningStatus',
   'properties.workloadProfileName',

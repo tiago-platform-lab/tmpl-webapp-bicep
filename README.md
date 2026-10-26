@@ -40,7 +40,7 @@ anywhere else (portal, `az containerapp update`), or the next deploy puts them b
 | `ci.yml` | every PR and push | no Azure access |
 | `infra-plan.yml` | PRs touching `infra/`, the workflow or `.github/actions/` | plan identity (What-If Reader) |
 | `deploy-dev.yml` | push to `main` | dev deploy identity: build `<app>:<sha>` on the runner, push, deploy to dev |
-| `blast-radius.yml` | every PR | plan identity (what-if JSON), then no Azure access: rules + LLM, PR comment and `risk:*` label |
+| `blast-radius.yml` | every PR | plan identity (what-if JSON), then no Azure access: rules + LLM, one PR comment |
 | `release.yml` | tag `vX.Y.Z` (a published release) | dev identity names the tested image `<app>:vX.Y.Z`; prod identity deploys it after approval |
 
 ### Releasing to prod
@@ -82,8 +82,8 @@ read them with `readEnvironmentVariable`.
 
 ## Blast radius bot
 
-Every pull request gets one comment (updated on each push) and a `risk:low|medium|high|critical`
-label, from `.github/workflows/blast-radius.yml`:
+Every pull request gets one comment, updated on each push, with its risk level
+(low, medium, high, critical), from `.github/workflows/blast-radius.yml`:
 
 1. **Rules (deterministic)** on the what-if of dev and prod and on the changed files: a Key Vault,
    storage account, database or Log Analytics deleted or modified, identities or roles touched,
