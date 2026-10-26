@@ -78,6 +78,7 @@ read them with `readEnvironmentVariable`.
 1. Replace `app/` with the real app (keep port 8080 or change `targetPort`).
 2. Turn on what you need in `infra/main.<env>.bicepparam`.
 3. Add the app's tests to `ci.yml` and its ecosystem to `dependabot.yml`.
+
 `.github/CODEOWNERS` is written by vending with the owning team (and the platform
 team on `infra/`); change it through a pull request if ownership changes.
 
