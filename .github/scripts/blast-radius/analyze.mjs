@@ -99,8 +99,9 @@ const isNoise = (leaf) =>
   (typeof leaf.after === 'string' && /^\[.*\]$/s.test(leaf.after));
 
 let noiseCount = 0;
-function deltaPaths(delta = [], prefix = '') {
-  return delta.flatMap((d) => {
+// what-if gives delta: null for Create and Delete, not an empty list.
+function deltaPaths(delta, prefix = '') {
+  return (delta || []).flatMap((d) => {
     const p = prefix ? `${prefix}.${d.path}` : d.path;
     if (d.children?.length) return deltaPaths(d.children, p);
     const leaf = { path: p, change: d.propertyChangeType, after: d.after };
