@@ -95,7 +95,9 @@ jobs:
   prod:
     needs: tag-image
     runs-on: ubuntu-latest
-    environment: prod # required reviewers; accepts v* tags only
+    environment:
+      name: prod # required reviewers; accepts v* tags only
+      url: ${{ steps.deploy.outputs.url }} # "View deployment" link in the run
     env:
       PLATFORM_RG: ${{ vars.PLATFORM_RG }}
       CAE_NAME: ${{ vars.CAE_NAME }}
@@ -108,10 +110,26 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Deploy ${{ github.ref_name }}
+        id: deploy
         run: |
-          az deployment group create \
+          set -euo pipefail
+          url=$(az deployment group create \
             --name "release-${{ github.run_id }}" \
             --resource-group "${{ vars.RESOURCE_GROUP }}" \
             --template-file infra/main.bicep \
             --parameters infra/main.prod.bicepparam \
-            --query properties.outputs.url.value -o tsv
+            --query properties.outputs.url.value -o tsv)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## 🚀 ${APP_NAME} ${VERSION} is live in prod
+
+          ### ➜ [Open the app](${url})
+          ${url}
+
+          | | |
+          |---|---|
+          | Environment | \`prod\` |
+          | Version | \`${VERSION}\` |
+          | Image | \`${APP_NAME}:${VERSION}\` |
+          | Commit | [\`${GITHUB_SHA::7}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}) |
+          EOF

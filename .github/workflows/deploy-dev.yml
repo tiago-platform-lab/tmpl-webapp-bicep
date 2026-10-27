@@ -43,7 +43,9 @@ jobs:
     # none and never deploys.
     if: vars.APP_NAME != ''
     runs-on: ubuntu-latest
-    environment: dev
+    environment:
+      name: dev
+      url: ${{ steps.deploy.outputs.url }} # "View deployment" link in the run
     env:
       PLATFORM_RG: ${{ vars.PLATFORM_RG }}
       CAE_NAME: ${{ vars.CAE_NAME }}
@@ -65,11 +67,26 @@ jobs:
           docker build -t "${ACR_LOGIN_SERVER}/${APP_NAME}:${IMAGE_TAG}" app/
           docker push "${ACR_LOGIN_SERVER}/${APP_NAME}:${IMAGE_TAG}"
       - name: Deploy
+        id: deploy
         run: |
-          az deployment group create \
+          set -euo pipefail
+          url=$(az deployment group create \
             --name "app-${{ github.run_id }}" \
             --resource-group "${{ vars.RESOURCE_GROUP }}" \
             --template-file infra/main.bicep \
             --parameters infra/main.dev.bicepparam \
-            --query properties.outputs.url.value -o tsv
+            --query properties.outputs.url.value -o tsv)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## 🚀 ${APP_NAME} is live in dev
+
+          ### ➜ [Open the app](${url})
+          ${url}
+
+          | | |
+          |---|---|
+          | Environment | \`dev\` |
+          | Image | \`${APP_NAME}:${IMAGE_TAG}\` |
+          | Commit | [\`${GITHUB_SHA::7}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}) |
+          EOF
       # TODO: smoke test the returned URL before moving on.
